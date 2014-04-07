@@ -1,0 +1,30 @@
+{
+  "name": "pagsfs",
+  "version": "0.0.0",
+  "description": "The pseudo filesytem behind pags",
+  "main": "index.js",
+  "dependencies": {
+    "archiver": "~0.8.1",
+    "express": "~3.5.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mustafaakin/pagsfs.git"
+  },
+  "keywords": [
+    "pags",
+    "archive",
+    "file",
+    "folder"
+  ],
+  "author": "Mustafa Akin",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mustafaakin/pagsfs/issues"
+  },
+  "homepage": "https://github.com/mustafaakin/pagsfs"
+}
