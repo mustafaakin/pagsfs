@@ -1,3 +1,4 @@
+var archiver = require("archiver");
 var express = require("express");
 var redis = require("redis");
 var uuid = require('node-uuid');
@@ -87,10 +88,11 @@ function createBucket(bucket, options, cb) {
 	});
 }
 
-
+/*
 putFile("mustafa", "bigfile", fs.createReadStream("bigfile"), function(){
 	client.end();
 });
+*/
 
 /*
 getFile("mustafa", "file1", 0, function(err, stream) {
@@ -121,7 +123,7 @@ function saveMeta(bucket, meta, cb) {
 		cb(err);
 	});
 }
-
+	
 function getFile(bucket, path, timestamp, cb) {
 	// Filter path for path traversal attacks
 	// if 0 return latest
@@ -224,8 +226,55 @@ function putFile(bucket, path, fileReadStream, cb) {
 	// Possible enhancement: Remove the old tar.gz
 }
 
+function oldestObjectInFile(file){
+	var newest = 0;
+	for (var time in file) {
+		if (time > newest) {
+			newest = time;
+		}
+	}
+	return file[newest];
+}
 
-function getBucket() {
+/*
+createBucket("mustafa", {revision:true}, function(){
+	putFile("mustafa", "file1", fs.createReadStream("file1"), function(){});
+	putFile("mustafa", "file2", fs.createReadStream("file2"), function(){});
+});
+*/
+// putFile("mustafa", "file1", fs.createReadStream("file1_new"), function(){});
+
+
+getBucket("mustafa", function(stream){
+	if ( stream){
+		console.log("uu beybi");
+		var writeStream = fs.createWriteStream("test.tar");
+		stream.pipe(writeStream);
+	} else {
+		console.log("yaa :/");
+	}
+});
+
+function getBucket(bucket, cb) {
+	readMeta(bucket, function(meta){
+		if ( !meta){
+			cb(null);
+		} else {
+			var files = meta.files;
+			var archive = archiver("tar");
+			for(var filename in files){
+				var latest = oldestObjectInFile(files[filename]);
+				if ( !latest){
+					// empty file/non existent file
+				} else {
+					var objectPath = p.join(store, bucket, latest.name);
+					archive.append(fs.createReadStream(objectPath), {name: filename});
+				}
+			}
+			archive.finalize();
+			cb(archive);
+		}
+	});
 	// 1. Check if folder exists from disk
 	// 2. If folder does not exist, ask peers
 	// 3. IF no one has data, return 404

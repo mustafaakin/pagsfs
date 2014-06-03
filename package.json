@@ -4,7 +4,7 @@
   "description": "The pseudo filesytem behind pags",
   "main": "index.js",
   "dependencies": {
-    "archiver": "~0.8.1",
+    "archiver": "^0.8.1",
     "colors": "^0.6.2",
     "express": "~3.5.1",
     "gridfs-stream": "^0.5.1",
