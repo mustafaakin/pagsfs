@@ -5,11 +5,13 @@
   "main": "index.js",
   "dependencies": {
     "archiver": "^0.8.1",
+    "async": "^0.9.0",
     "colors": "^0.6.2",
     "express": "~3.5.1",
     "gridfs-stream": "^0.5.1",
     "mongodb": "^1.4.5",
-    "node-uuid": "^1.4.1"
+    "node-uuid": "^1.4.1",
+    "tar-stream": "^0.4.2"
   },
   "devDependencies": {},
   "scripts": {

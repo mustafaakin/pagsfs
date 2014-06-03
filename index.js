@@ -3,6 +3,8 @@ var express = require("express");
 var redis = require("redis");
 var uuid = require('node-uuid');
 var crypto = require('crypto');
+var tar = require('tar-stream');
+var async = require("async");
 
 var client = require("redis").createClient();
 var lock = require("redis-lock")(client);
@@ -18,7 +20,6 @@ var color = require("colors");
 // Unsafe Listen Port, one time key based gets and puts
 
 // require 
-
 /* 
 	Methods: 
 		- create: 
@@ -30,7 +31,6 @@ var color = require("colors");
 		- deleteFolder: Delete folder, not meant to be used
 		- status: 
 		- health:
-		- sync: sync changes in folder with metadata and objects to other ports, 
 */
 
 
@@ -123,7 +123,7 @@ function saveMeta(bucket, meta, cb) {
 		cb(err);
 	});
 }
-	
+
 function getFile(bucket, path, timestamp, cb) {
 	// Filter path for path traversal attacks
 	// if 0 return latest
@@ -176,7 +176,6 @@ function putFile(bucket, path, fileReadStream, cb) {
 				// Handle error
 			} else {
 				// EMPTY FILE STREAM ERRORS!!!
-
 				var files = meta.files;
 				var file = meta.files[path];
 
@@ -226,7 +225,7 @@ function putFile(bucket, path, fileReadStream, cb) {
 	// Possible enhancement: Remove the old tar.gz
 }
 
-function oldestObjectInFile(file){
+function oldestObjectInFile(file) {
 	var newest = 0;
 	for (var time in file) {
 		if (time > newest) {
@@ -245,8 +244,9 @@ createBucket("mustafa", {revision:true}, function(){
 // putFile("mustafa", "file1", fs.createReadStream("file1_new"), function(){});
 
 
-getBucket("mustafa", function(stream){
-	if ( stream){
+/*
+getBucket("mustafa", function(stream) {
+	if (stream) {
 		console.log("uu beybi");
 		var writeStream = fs.createWriteStream("test.tar");
 		stream.pipe(writeStream);
@@ -254,21 +254,25 @@ getBucket("mustafa", function(stream){
 		console.log("yaa :/");
 	}
 });
+*/
+
 
 function getBucket(bucket, cb) {
-	readMeta(bucket, function(meta){
-		if ( !meta){
+	readMeta(bucket, function(meta) {
+		if (!meta) {
 			cb(null);
 		} else {
 			var files = meta.files;
 			var archive = archiver("tar");
-			for(var filename in files){
+			for (var filename in files) {
 				var latest = oldestObjectInFile(files[filename]);
-				if ( !latest){
+				if (!latest) {
 					// empty file/non existent file
 				} else {
 					var objectPath = p.join(store, bucket, latest.name);
-					archive.append(fs.createReadStream(objectPath), {name: filename});
+					archive.append(fs.createReadStream(objectPath), {
+						name: filename
+					});
 				}
 			}
 			archive.finalize();
@@ -282,8 +286,82 @@ function getBucket(bucket, cb) {
 	// Possible enhancement: Determimne file date & cache .tar.gz
 }
 
-function putBucket() {
-	// 1. Check if folder exits from disk
-	// 2. Revision all files in folder by one
-	// 3.  
+function putBucket(bucket, tarStream, putBucketCallback) {
+	// Load all meta
+	// Get the file list
+	// Prepare a new meta by using old meta
+	// Delete other contents
+	lock("pagsfs-" + bucket, 10000, function(done) {
+		readMeta(bucket, function(meta) {
+			if (!meta) {
+				putBucketCallback("no meta man wtf");
+			} else {
+				// Unlink old files
+				var toUnlink = [];
+				for (var filename in meta.files) {
+					var file = meta.files[filename];
+					console.log(file);
+					for (var timestamp in file) {
+						toUnlink.push(file[timestamp].name);
+					}
+				}
+
+				// Unlink files
+				async.each(toUnlink, function(file, callback) {
+					console.log(store, bucket, file);
+					var filePath = p.join(store, bucket, file);
+					fs.unlink(filePath, callback);
+				}, function(err) {
+					console.log(err);
+
+					meta.files = {};
+
+					var extract = tar.extract();
+
+					extract.on('entry', function(header, entryStream, entryCallback) {
+						var hash = crypto.createHash('sha1');
+						hash.setEncoding('hex');
+
+						var objectName = uuid.v4();
+						var filePath = header.name;
+						var destinationPath = p.join(store, bucket, objectName);
+						var destinationStream = fs.createWriteStream(destinationPath);
+
+						entryStream.on("error", function() {
+							putBucketCallback("file read error");
+							console.log("error file stream :/");
+						});
+
+						entryStream.on('end', function() {
+							hash.end();
+							var computedHash = hash.read();
+							var time = (new Date()).getTime();
+
+							meta.files[filePath] = {};
+							meta.files[filePath][time] = {
+								hash: computedHash,
+								name: objectName,
+							}
+							entryCallback();
+						});
+
+						entryStream.pipe(hash);
+						entryStream.pipe(destinationStream);
+					});
+					tarStream.pipe(extract);
+
+					extract.on('finish', function(){
+						console.log("extract finish");
+						saveMeta(bucket, meta, function(err) {
+							putBucketCallback(err);
+							done();
+						});
+					});
+				});
+			}
+		});
+	});
 }
+
+var tarReadStream = fs.createReadStream("aq.tar");
+putBucket("myaq", tarReadStream, console.log);
