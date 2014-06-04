@@ -126,7 +126,7 @@ function putFile(bucket, path, fileReadStream, putFileCallback) {
 	lock("pagsfs-" + bucket, 10000, function(done) {
 		readMeta(bucket, function(meta) {
 			if (!meta) {
-				putFileCallback(new Error("Metadata not found for: " + bucket));
+				putFileCallback("Metadata not found for: " + bucket);
 			} else {
 				
 				// EMPTY FILE STREAM ERRORS!!!
@@ -149,7 +149,7 @@ function putFile(bucket, path, fileReadStream, putFileCallback) {
 
 				fileReadStream.on("error", function() {
 					done();
-					putFileCallback(new Error("Cannot read from stream" + bucket + ", " + path));
+					putFileCallback("Cannot read from stream" + bucket + ", " + path);
 				});
 
 				fileReadStream.on('end', function() {
@@ -193,14 +193,14 @@ function oldestObjectInFile(file) {
 function getBucket(bucket, getBucketCallback) {
 	readMeta(bucket, function(meta) {
 		if (!meta) {
-			getBucketCallback(new Error("Bucket not found"));
+			getBucketCallback("Bucket not found");
 		} else {
 			var files = meta.files;
 			var archive = archiver("tar");
 			for (var filename in files) {
 				var latest = oldestObjectInFile(files[filename]);
 				if (!latest) {
-					getBucketCallback(new Error("Internal error, file not found"));
+					getBucketCallback("Internal error, file not found");
 					// empty file/non existent file
 				} else {
 					var objectPath = p.join(store, bucket, latest.name);
@@ -228,7 +228,7 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 	lock("pagsfs-" + bucket, 10000, function(done) {
 		readMeta(bucket, function(meta) {
 			if (!meta) {
-				putBucketCallback(new Error("no meta man wtf"));
+				putBucketCallback("Meta not found");
 			} else {
 				// Unlink old files
 				var toUnlink = [];
@@ -259,7 +259,7 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 						var destinationStream = fs.createWriteStream(destinationPath);
 
 						entryStream.on("error", function() {
-							putBucketCallback(new Error("file read error"));
+							putBucketCallback("File cannot be read..");
 						});
 
 						entryStream.on('end', function() {
