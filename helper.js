@@ -43,21 +43,6 @@ function createBucket(bucket, options, cb) {
 	});
 }
 
-/*
-putFile("mustafa", "bigfile", fs.createReadStream("bigfile"), function(){
-	client.end();
-});
-*/
-
-/*
-getFile("mustafa", "file1", 0, function(err, stream) {
-	stream.on("data", function(data) {
-		console.log(data.toString());
-	});
-	console.log("Error", err);
-});
-*/
-
 function readMeta(bucket, cb) {
 	var metaPath = p.join(store, bucket, "meta.json");
 	fs.readFile(metaPath, function(err, data) {
@@ -292,7 +277,30 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 	});
 }
 
+function getRevisions(bucket, path, getRevisionsCallback){
+	readMeta(bucket, function(meta){
+		if ( !meta){
+			getRevisionsCallback("No meta data found");
+		} else {
+			var files = meta.files;
+			var file = meta.files[path];
+			if ( !file){
+				getRevisionsCallback("File not found");
+			} else {
+				var versions = [];
+				for(var version in file){
+					versions.push(version);
+				}
+				versions = versions.sort();
+				getRevisionsCallback(null, versions);
+			}
+		}
+	});
+}
 
+function copyBucket(srcBucket, dstBucket){
+	// TODO: Implement
+}
 
 module.exports.setStore = function(givenStore){
 	store = givenStore;
@@ -302,3 +310,6 @@ module.exports.getFile = getFile;
 module.exports.putFile = putFile;
 module.exports.getBucket = getBucket;
 module.exports.putBucket = putBucket;
+module.exports.getRevisions = getRevisions;
+module.exports.copyBucket = copyBucket;
+module.exports.createBucket = createBucket;

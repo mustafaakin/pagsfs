@@ -64,6 +64,20 @@ function putBucketHandler(req,res){
 	});
 }
 
+function getRevisionsHandler(req,res){
+	var bucket = req.params.bucketName;
+	var path = req.query.file;
+
+	helper.getRevisions(bucket, path, function(err, revisions) {
+		if (err) {
+			res.send({
+				status: err
+			}, 404);
+		} else {
+			res.send(revisions);
+		}
+	});
+}
 
 // Remember to Add File Size Limits
 privateApp.use(multer({ dest: '/tmp/'}));
@@ -71,6 +85,7 @@ privateApp.use(morgan('dev')); // log every request to the console
 privateApp.use(bodyParser()); // pull information from html in POST
 privateApp.use(methodOverride()); // simulate DELETE and PUT
 privateApp.get("/file/:bucketName", getFileHandler);
+privateApp.get("/revisions/:bucketName", getRevisionsHandler);
 privateApp.post("/file/:bucketName", putFileHandler);
 privateApp.get("/bucket/:bucketName", getBucketHandler);
 privateApp.post("/bucket/:bucketName", putBucketHandler);
