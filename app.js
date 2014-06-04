@@ -4,6 +4,11 @@ var methodOverride = require('method-override');
 var morgan = require('morgan');
 var multer  = require('multer'); // TODO: Change it directly to busboy for streaming data, avoiding saving to disk 
 var fs = require("fs");
+var uuid = require('node-uuid');
+var crypto = require('crypto');
+var redis = require("redis");
+
+var redisClient = redis.createClient();
 
 var publicApp = express();
 var privateApp = express();
@@ -79,6 +84,37 @@ function getRevisionsHandler(req,res){
 	});
 }
 
+function generateHMAC(){
+	var message = uuid.v4();
+	var secret = 'Oh my god what happened here'; // Of course this will be really secret, it is just an example..	
+	hash = crypto.createHmac('sha1', secret).update(message).digest('hex');
+	return hash;
+}
+
+function checkHMAC(bucket, hash, cb){
+	redisClient.get([bucket], function(err, reply){
+		if ( hash == reply){
+			redisClient.del(bucket, function(err, reply){
+				cb(true);
+			});
+		} else {
+			cb(false);
+		}
+	});
+}
+
+function setHMAC(bucket, cb){
+	var hash = generateHMAC();
+	redisClient.set([bucket, hash], function(err, replies){
+		console.log(err);
+		console.log(replies);
+		cb(err);
+	});
+}
+
+// setHMAC("mustafa", console.log);
+// checkHMAC("mustafa", "94b0139b749430ee52a3a241289f3eacc883a51c", console.log);
+
 // Remember to Add File Size Limits
 privateApp.use(multer({ dest: '/tmp/'}));
 privateApp.use(morgan('dev')); // log every request to the console
@@ -90,3 +126,5 @@ privateApp.post("/file/:bucketName", putFileHandler);
 privateApp.get("/bucket/:bucketName", getBucketHandler);
 privateApp.post("/bucket/:bucketName", putBucketHandler);
 privateApp.listen(4000);
+
+
