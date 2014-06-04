@@ -1,5 +1,5 @@
 var archiver = require("archiver");
-var express = require("express");
+
 var redis = require("redis");
 var uuid = require('node-uuid');
 var crypto = require('crypto');
@@ -14,54 +14,10 @@ var p = require("path");
 var mkdirp = require("mkdirp");
 
 var color = require("colors");
-// Network Isolation upto user
-
-// Safe Listen Port, no auth needed, adding new nodes
-// Unsafe Listen Port, one time key based gets and puts
-
-// require 
-/* 
-	Methods: 
-		- create: 
-		- getFile: 
-		- putFile: Create if does not exist, else version it if specified, get lock for folder!
-		- getFolder: Check if data exits, tar.gz them
-		- putFolder: Create if does not exist, else version all folder contents if not specified
-		- copyFolder: Create a new exact copy of folder from source to target
-		- deleteFolder: Delete folder, not meant to be used
-		- status: 
-		- health:
-*/
 
 
-/*
-#### Bucket storage structure:
-	meta.json
-	archive.tar
-	OBJECT0000001
-	OBJECT0000002
-	OBJECT0000003
-	OBJECT0000004
-	OBJECT0000005
-	OBJECT0000006
-	...
+var store = "."; // default store
 
-	meta.json = {
-		name: ...
-		replicate: boolean
-		files: {
-			"abc/def.ad": {
-				timestamp1: {
-					shasum: 123123123,
-					name: OBJECTNAME1
-				}
-			}
-		}
-	}
-	on file update, determine the changes and replicate the metadata and the objects to others
-*/
-
-var store = "/home/mustafa/pagsfs/1";
 
 function createBucket(bucket, options, cb) {
 	// Check if options replicate is true or false, nothing else	
@@ -82,7 +38,6 @@ function createBucket(bucket, options, cb) {
 				});
 			});
 		} else {
-			console.error("Bucket", bucket, "already exists");
 			cb(false);
 		}
 	});
@@ -167,14 +122,13 @@ function getFile(bucket, path, timestamp, cb) {
 	// 4. If data exists, stream from disk or network 
 }
 
-function putFile(bucket, path, fileReadStream, cb) {
+function putFile(bucket, path, fileReadStream, putFileCallback) {
 	lock("pagsfs-" + bucket, 10000, function(done) {
-		console.log("Lock acquired for ", bucket.red, " for file ", path.green);
 		readMeta(bucket, function(meta) {
 			if (!meta) {
-				console.log("no meta :/")
-				// Handle error
+				putFileCallback(new Error("Metadata not found for: " + bucket));
 			} else {
+				
 				// EMPTY FILE STREAM ERRORS!!!
 				var files = meta.files;
 				var file = meta.files[path];
@@ -182,10 +136,11 @@ function putFile(bucket, path, fileReadStream, cb) {
 				if (!file) {
 					meta.files[path] = {}
 				}
+
 				// Check for replication status
 				// Delete old copies if needed
 				var objectName = uuid.v4();
-				console.log("new object for bucket", bucket.red, objectName.blue);
+
 				var objectPath = p.join(store, bucket, objectName);
 				var fileWriteStream = fs.createWriteStream(objectPath);
 
@@ -194,7 +149,7 @@ function putFile(bucket, path, fileReadStream, cb) {
 
 				fileReadStream.on("error", function() {
 					done();
-					console.log("error file stream :/");
+					putFileCallback(new Error("Cannot read from stream" + bucket + ", " + path));
 				});
 
 				fileReadStream.on('end', function() {
@@ -207,7 +162,7 @@ function putFile(bucket, path, fileReadStream, cb) {
 					}
 
 					saveMeta(bucket, meta, function(err) {
-						cb(err);
+						putFileCallback(err);
 						done();
 					});
 					// Sync!!
@@ -235,38 +190,17 @@ function oldestObjectInFile(file) {
 	return file[newest];
 }
 
-/*
-createBucket("mustafa", {revision:true}, function(){
-	putFile("mustafa", "file1", fs.createReadStream("file1"), function(){});
-	putFile("mustafa", "file2", fs.createReadStream("file2"), function(){});
-});
-*/
-// putFile("mustafa", "file1", fs.createReadStream("file1_new"), function(){});
-
-
-/*
-getBucket("mustafa", function(stream) {
-	if (stream) {
-		console.log("uu beybi");
-		var writeStream = fs.createWriteStream("test.tar");
-		stream.pipe(writeStream);
-	} else {
-		console.log("yaa :/");
-	}
-});
-*/
-
-
-function getBucket(bucket, cb) {
+function getBucket(bucket, getBucketCallback) {
 	readMeta(bucket, function(meta) {
 		if (!meta) {
-			cb(null);
+			getBucketCallback(new Error("Bucket not found"));
 		} else {
 			var files = meta.files;
 			var archive = archiver("tar");
 			for (var filename in files) {
 				var latest = oldestObjectInFile(files[filename]);
 				if (!latest) {
+					getBucketCallback(new Error("Internal error, file not found"));
 					// empty file/non existent file
 				} else {
 					var objectPath = p.join(store, bucket, latest.name);
@@ -276,7 +210,7 @@ function getBucket(bucket, cb) {
 				}
 			}
 			archive.finalize();
-			cb(archive);
+			getBucketCallback(null, archive);
 		}
 	});
 	// 1. Check if folder exists from disk
@@ -294,13 +228,12 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 	lock("pagsfs-" + bucket, 10000, function(done) {
 		readMeta(bucket, function(meta) {
 			if (!meta) {
-				putBucketCallback("no meta man wtf");
+				putBucketCallback(new Error("no meta man wtf"));
 			} else {
 				// Unlink old files
 				var toUnlink = [];
 				for (var filename in meta.files) {
 					var file = meta.files[filename];
-					console.log(file);
 					for (var timestamp in file) {
 						toUnlink.push(file[timestamp].name);
 					}
@@ -308,11 +241,9 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 
 				// Unlink files
 				async.each(toUnlink, function(file, callback) {
-					console.log(store, bucket, file);
 					var filePath = p.join(store, bucket, file);
 					fs.unlink(filePath, callback);
 				}, function(err) {
-					console.log(err);
 
 					meta.files = {};
 
@@ -328,8 +259,7 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 						var destinationStream = fs.createWriteStream(destinationPath);
 
 						entryStream.on("error", function() {
-							putBucketCallback("file read error");
-							console.log("error file stream :/");
+							putBucketCallback(new Error("file read error"));
 						});
 
 						entryStream.on('end', function() {
@@ -351,7 +281,6 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 					tarStream.pipe(extract);
 
 					extract.on('finish', function(){
-						console.log("extract finish");
 						saveMeta(bucket, meta, function(err) {
 							putBucketCallback(err);
 							done();
@@ -363,5 +292,13 @@ function putBucket(bucket, tarStream, putBucketCallback) {
 	});
 }
 
-var tarReadStream = fs.createReadStream("aq.tar");
-putBucket("myaq", tarReadStream, console.log);
+
+
+module.exports.setStore = function(givenStore){
+	store = givenStore;
+}
+
+module.exports.getFile = getFile;
+module.exports.putFile = putFile;
+module.exports.getBucket = getBucket;
+module.exports.putBucket = putBucket;
