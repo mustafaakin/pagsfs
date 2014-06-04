@@ -118,25 +118,34 @@ function paramChecker(req, res, next) {
 	// Prevent path traversal errors
 	// See if bucket is valid
 	var bucket = req.params.bucketName;
-	var relation = p.relative(store, p.join(store, bucket));
-	var isBucketWrong = relation.length >= 2 && relation.substr(0, 2) == "..";
-	if (isBucketWrong) {
+	if ( bucket == null || typeof bucket == undefined){
 		res.send({
 			status: "Bucket name is not right:" + bucket
 		}, 401);
 	} else {
-		// There does not have to be a path all the time
-		var path = req.query.path;
-		if (path) {
-			var relation = p.relative(store, p.join(store, path));
-			var isPathWrong = relation.length >= 2 && relation.substr(0, 2) == "..";
-			if (isBucketWrong) {
-				res.send({
-					status: "Path name is not right:" + path
-				}, 401);
-			}
+		// TODO: Add try catch to here 
+		var relation = p.relative(store, p.join(store, bucket));
+		var isBucketWrong = relation.length >= 2 && relation.substr(0, 2) == "..";
+		if (isBucketWrong) {
+			res.send({
+				status: "Bucket name is not right:" + bucket
+			}, 401);
 		} else {
-			//next();
+			// There does not have to be a path all the time
+			var path = req.query.path;
+			if (path) {
+				var relation = p.relative(store, p.join(store, path));
+				var isPathWrong = relation.length >= 2 && relation.substr(0, 2) == "..";
+				if (isBucketWrong) {
+					res.send({
+						status: "Path name is not right:" + path
+					}, 401);
+				} else {
+					next();
+				}
+			} else {
+				next();
+			}
 		}
 	}
 }
@@ -176,8 +185,6 @@ function setPublicAccess(req, res) {
 	});
 }
 
-
-
 // Remember to Add File Size Limits
 privateApp.use(multer({
 	dest: '/tmp/'
@@ -187,13 +194,12 @@ privateApp.use(bodyParser()); // pull information from html in POST
 privateApp.use(methodOverride()); // simulate DELETE and PUT
 
 
-privateApp.get("/file/:bucketName", getFileHandler);
-privateApp.get("/revisions/:bucketName", getRevisionsHandler);
-privateApp.post("/file/:bucketName", putFileHandler);
-privateApp.get("/bucket/:bucketName", getBucketHandler);
-privateApp.post("/bucket/:bucketName", putBucketHandler);
-privateApp.get("/setPublicAccess/:bucketName", setPublicAccess);
-privateApp.use(paramChecker);
+privateApp.get("/file/:bucketName", paramChecker, getFileHandler);
+privateApp.get("/revisions/:bucketName", paramChecker, getRevisionsHandler);
+privateApp.post("/file/:bucketName", paramChecker, putFileHandler);
+privateApp.get("/bucket/:bucketName", paramChecker, getBucketHandler);
+privateApp.post("/bucket/:bucketName", paramChecker, putBucketHandler);
+privateApp.get("/setPublicAccess/:bucketName",paramChecker, setPublicAccess);
 
 // Eliminate this code copy paste by Using Express 4.0 Router
 publicApp.use(multer({
@@ -204,17 +210,11 @@ publicApp.use(bodyParser()); // pull information from html in POST
 publicApp.use(methodOverride()); // simulate DELETE and PUT
 
 
-
-var router = express.Router();
-
-// router.get("/file/:bucketName", getFileHandler);
-//publicApp.get("/revisions/:bucketName", getRevisionsHandler);
-//publicApp.post("/file/:bucketName", putFileHandler);
-router.get("/bucket/:bucketName", hmacChecker, getBucketHandler);
-// publicApp.post("/bucket/:bucketName", putBucketHandler);
-
-publicApp.use("/", router);
-
+publicApp.get("/file/:bucketName",  paramChecker, hmacChecker, getFileHandler);
+publicApp.get("/revisions/:bucketName",  paramChecker, hmacChecker, getRevisionsHandler);
+publicApp.post("/file/:bucketName",  paramChecker, hmacChecker, putFileHandler);
+publicApp.get("/bucket/:bucketName", paramChecker, hmacChecker, getBucketHandler);
+publicApp.post("/bucket/:bucketName",  paramChecker, hmacChecker, putBucketHandler);
 
 privateApp.listen(4000);
 publicApp.listen(5000);
