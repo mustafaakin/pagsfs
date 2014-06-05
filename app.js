@@ -28,7 +28,6 @@ function getFileHandler(req, res) {
 
 	helper.getFile(bucket, path, timestamp, function(err, stream) {
 		if (err) {
-			console.log(err);
 			res.send({
 				status: "File not found"
 			}, 404);
@@ -42,7 +41,6 @@ function getBucketHandler(req, res) {
 	var bucket = req.params.bucketName;
 	helper.getBucket(bucket, function(err, stream) {
 		if (err) {
-			console.log(err);
 			res.send({
 				status: "Bucket not found"
 			}, 404);
@@ -159,8 +157,6 @@ function hmacChecker(req, res, next) {
 		}, 401);
 	} else {
 		checkHMAC(bucket, code, function(isValid) {
-			console.log(bucket, code);
-			console.log(isValid);
 			if (isValid) {
 				next();
 			} else {
@@ -185,11 +181,25 @@ function setPublicAccess(req, res) {
 	});
 }
 
+function copyBucketHandler(req, res){
+	var srcBucketName = req.params.srcBucketName;
+	var dstBucketName = req.params.dstBucketName;
+	// TODO: Check names
+	helper.copyBucket(srcBucketName, dstBucketName, function(err){
+		if ( err){
+			res.send({status: "Cannot copy bucket: '" + srcBucket + "' to new bucket: '" + dstBucket + "'" }, 400);
+		} else {
+			res.send(200);
+		}
+	});
+}
+
+
 // Remember to Add File Size Limits
 privateApp.use(multer({
 	dest: '/tmp/'
 }));
-privateApp.use(morgan('dev')); // log every request to the console
+// privateApp.use(morgan('dev')); // log every request to the console
 privateApp.use(bodyParser()); // pull information from html in POST
 privateApp.use(methodOverride()); // simulate DELETE and PUT
 
@@ -200,15 +210,14 @@ privateApp.post("/file/:bucketName", paramChecker, putFileHandler);
 privateApp.get("/bucket/:bucketName", paramChecker, getBucketHandler);
 privateApp.post("/bucket/:bucketName", paramChecker, putBucketHandler);
 privateApp.get("/setPublicAccess/:bucketName",paramChecker, setPublicAccess);
+privateApp.get("/copy/:srcBucketName/:dstBucketName", copyBucketHandler);
 
-// Eliminate this code copy paste by Using Express 4.0 Router
 publicApp.use(multer({
 	dest: '/tmp/'
 }));
 publicApp.use(morgan('dev')); // log every request to the console
 publicApp.use(bodyParser()); // pull information from html in POST
 publicApp.use(methodOverride()); // simulate DELETE and PUT
-
 
 publicApp.get("/file/:bucketName",  paramChecker, hmacChecker, getFileHandler);
 publicApp.get("/revisions/:bucketName",  paramChecker, hmacChecker, getRevisionsHandler);
@@ -218,3 +227,4 @@ publicApp.post("/bucket/:bucketName",  paramChecker, hmacChecker, putBucketHandl
 
 privateApp.listen(4000);
 publicApp.listen(5000);
+

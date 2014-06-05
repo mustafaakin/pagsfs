@@ -5,6 +5,7 @@ var uuid = require('node-uuid');
 var crypto = require('crypto');
 var tar = require('tar-stream');
 var async = require("async");
+var rimraf = require("rimraf");
 
 var client = require("redis").createClient();
 var lock = require("redis-lock")(client);
@@ -298,9 +299,51 @@ function getRevisions(bucket, path, getRevisionsCallback){
 	});
 }
 
-function copyBucket(srcBucket, dstBucket){
-	// TODO: Implement
+function copyBucket(srcBucket, dstBucket, copyBucketCallback){
+	// TODO: Escape paths!!
+	// Check if dstBucket exists
+	var destinationPath = p.join(store, dstBucket);
+	rimraf(destinationPath, function(err){
+		
+		mkdirp(destinationPath, function(err){
+
+			readMeta(srcBucket, function(meta){
+				if ( !meta){
+					copyBucketCallback("No meta found");
+				} else {
+					meta.name = dstBucket;
+
+					var files = meta.files;
+					var work = [];
+					for(var file in files){
+						for(var version in files[file]){
+							work.push(files[file][version].name);
+						}
+					}
+
+					async.each(work, function(file, asyncCallback){
+						var readPath = p.join(store, srcBucket, file);
+						var writePath = p.join(store, dstBucket, file);
+						
+						var readStream = fs.createReadStream(readPath);
+						var writeStream = fs.createWriteStream(writePath);
+						readStream.pipe(writeStream);
+						// TODO: Handle errors
+						readStream.on("end", function(){
+							asyncCallback(null);
+						});
+					}, function(err){
+						saveMeta(dstBucket, meta, function(err){
+							copyBucketCallback(err);
+						});
+					});
+				}
+			});
+		});
+	});
 }
+
+
 
 module.exports.setStore = function(givenStore){
 	store = givenStore;
